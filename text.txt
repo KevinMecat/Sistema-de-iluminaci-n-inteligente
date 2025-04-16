@@ -1,0 +1,11 @@
+platformio device monitor --port COM3 --baud 115200
+
+platformio run --target uploadfs
+
+// Credenciales WiFi
+//#define SECRET_SSID "FAMILIA-BLANCO"
+//#define SECRET_PSW "2010mary35kk6915"
+
+// Fuler House
+#define SECRET_SSID "CLARO1_68C56F"
+#define SECRET_PSW "816f4CvQpH"

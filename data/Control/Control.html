@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Control de Luces</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #4a6fa5;
+      --primary-dark: #3a5a8a;
+      --bg-dark: #1a1a2e;
+      --bg-light: #f0f0f0;
+      --bg-panel-dark: #16213e;
+      --bg-panel-light: #ffffff;
+      --text-light: #f1f1f1;
+      --text-dark: #1a1a2e;
+      --text-muted: #b8b8b8;
+      --bulb-off: #555;
+      --success: #4caf50;
+      --error: #f44336;
+      --warning: #ff9800;
+      --bulb-on: #ffeb3b;
+    }
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-light);
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    body.light-theme {
+      background-color: var(--bg-light);
+      color: var(--text-dark);
+    }
+
+    h1 {
+      text-align: center;
+      color: var(--primary);
+      font-weight: 300;
+      margin-bottom: 40px;
+    }
+
+    .theme-toggle {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      transition: background 0.3s;
+    }
+
+    .theme-toggle:hover {
+      background: var(--primary-dark);
+    }
+
+    .bulb-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Adjusted for smaller screens */
+      gap: 20px;
+      margin-top: 30px;
+    }
+
+    .bulb-card {
+      background: var(--bg-panel-dark);
+      padding: 20px;
+      border-radius: 12px;
+      border-left: 5px solid var(--primary);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+      transition: background 0.3s ease;
+    }
+
+    body.light-theme .bulb-card {
+      background: var(--bg-panel-light);
+    }
+
+    .bulb-title {
+      text-align: center;
+      font-size: 1.2rem; /* Made the font size a little smaller */
+      color: var(--primary);
+      margin-bottom: 15px;
+    }
+
+    .bulb-visual {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 20px 0;
+    }
+
+    .bulb {
+      width: 90px; /* Adjusted to be a bit larger */
+      height: 120px; /* Adjusted to be a bit larger */
+      background-color: var(--bulb-off);
+      border-radius: 50% 50% 40% 40%;
+      transition: all 0.3s ease;
+    }
+
+    .bulb.on {
+      background-color: var(--bulb-on);
+      box-shadow: 0 0 60px rgba(255, 235, 59, 0.7);
+    }
+
+    .bulb-base {
+      width: 50px;
+      height: 25px;
+      background-color: #333;
+      border-radius: 3px;
+      margin-top: 10px;
+    }
+
+    .brightness-slider {
+      width: 100%;
+      margin-top: 15px;
+    }
+
+    .brightness-value {
+      text-align: right;
+      font-size: 1rem; /* Made the font a little larger */
+      color: var(--text-muted);
+    }
+
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 28px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: 0.4s;
+      border-radius: 28px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: 0.4s;
+      border-radius: 50%;
+    }
+
+    .switch input:checked + .slider {
+      background-color: var(--primary);
+    }
+
+    .switch input:checked + .slider:before {
+      transform: translateX(32px);
+    }
+
+    input:focus, button:focus {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: var(--text-muted);
+      outline: none;
+      transition: background 0.3s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--primary);
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--primary);
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    body.light-theme input[type="range"] {
+      background: var(--text-dark);
+    }
+
+    body.light-theme input[type="range"]::-webkit-slider-thumb {
+      background: var(--primary-dark);
+    }
+
+    body.light-theme input[type="range"]::-moz-range-thumb {
+      background: var(--primary-dark);
+    }
+
+  </style>
+</head>
+<body>
+  <button class="theme-toggle">🌓 Tema</button>
+  <h1>Control de Luces Inteligente</h1>
+  <div class="bulb-grid" id="controls"></div>
+
+  <script>
+    document.querySelector('.theme-toggle').addEventListener('click', () => {
+      document.body.classList.toggle('light-theme');
+    });
+
+    const bulbs = [
+      { id: 0, name: "Garaje" },
+      { id: 1, name: "Sala" },
+      { id: 2, name: "Cocina" },
+      { id: 3, name: "Baño" },
+      { id: 4, name: "Cuarto" }
+    ];
+
+    const controlsDiv = document.getElementById("controls");
+
+    bulbs.forEach(bulb => {
+      const container = document.createElement("div");
+      container.className = "bulb-card";
+      container.innerHTML = `
+        <div class="bulb-title">${bulb.name}</div>
+        <div class="bulb-visual">
+          <div class="bulb" id="bulb-${bulb.id}"></div>
+          <div class="bulb-base"></div>
+        </div>
+        <input type="range" min="0" max="255" value="0" id="slider-${bulb.id}" class="brightness-slider" />
+        <div class="brightness-value"><span id="value-${bulb.id}">0</span>%</div>
+        <div class="toggle-container">
+          <span>Apagar</span>
+          <label class="switch"><input type="checkbox" id="power-${bulb.id}"><span class="slider"></span></label>
+          <span>Encender</span>
+        </div>
+        ${bulb.id === 0 ? `
+          <div class="toggle-container">
+            <span>Manual</span>
+            <label class="switch"><input type="checkbox" id="autoMode-${bulb.id}"><span class="slider"></span></label>
+            <span>Automático</span>
+          </div>` : ''}
+      `;
+
+      controlsDiv.appendChild(container);
+
+      const slider = container.querySelector(`#slider-${bulb.id}`);
+      const bulbVisual = container.querySelector(`#bulb-${bulb.id}`);
+      const valueLabel = container.querySelector(`#value-${bulb.id}`);
+      const powerCheckbox = container.querySelector(`#power-${bulb.id}`);
+
+      const updateBrightness = (value) => {
+        slider.value = value;
+        valueLabel.textContent = Math.round(value / 255 * 100);
+        bulbVisual.classList.toggle("on", value > 0);
+        fetch(`/api/control?id=${bulb.id}&action=setBrightness&value=${value}`);
+      };
+
+      slider.addEventListener("input", e => {
+        updateBrightness(+e.target.value);
+      });
+
+      powerCheckbox.addEventListener("change", e => {
+        const powerOn = e.target.checked;
+        const value = powerOn ? 255 : 0;
+        updateBrightness(value);
+      });
+
+      if (bulb.id === 0) {
+        const autoCheckbox = container.querySelector(`#autoMode-${bulb.id}`);
+        autoCheckbox.addEventListener("change", e => {
+          const mode = e.target.checked ? "auto" : "manual";
+          fetch(`/api/control?id=${bulb.id}&action=setMode&mode=${mode}`);
+        });
+      }
+    });
+  </script>
+</body>
+</html>
