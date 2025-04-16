@@ -1,0 +1,13 @@
+[PROJECT]
+Target=Sample.hex
+Processor_Text=PIC24FJ256GA106
+CCSVersion=5.015
+Compiler=PCD
+[Target Data]
+FileList=Sample.c
+[Directories]
+Include=C:\Program Files (x86)\PICC\devices\;C:\Program Files (x86)\PICC\drivers\
+[Sample.c]
+Type=4
+[mru-list]
+1=Sample.c

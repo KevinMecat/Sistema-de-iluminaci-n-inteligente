@@ -1,0 +1,1 @@
+Craer archivo .exe en c = g++ nombre del archivo.cpp -o nombre del archivo

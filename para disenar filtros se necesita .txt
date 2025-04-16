@@ -1,0 +1,12 @@
+para disenar filtros se necesita :
+
+1) frecuencia de interés (fp)
+2) frecuencia de paro (Fs)
+3) Atenuación de la banda pasante Ap
+4) Atenuación de paro Ap
+
+Banda pasante: banda que deja pasar el filtro, ósea que no tenga distorsión (que sea plano) como lo es la de Butterworth
+
+filtro pasa bajo.
+filtro pasa alta.
+filtro pasa banda.
