@@ -83,57 +83,58 @@
                 }
             }
         });
-
+    
         let consumoTotal = 0;
         const costoKWh = 0.20;
-
-        function actualizarDatos() {
-            const voltaje = 12;
-            const corriente = (Math.random() * 2).toFixed(2);
-            const potencia = (voltaje * corriente).toFixed(2);
-            const tiempo = new Date().toLocaleTimeString();
-
-            if (consumoChart.data.labels.length > 20) {
-                consumoChart.data.labels.shift();
-                consumoChart.data.datasets[0].data.shift();
+    
+        async function obtenerDatos() {
+            try {
+                // Obtener el último registro de consumo desde el backend
+                const response = await fetch('http://localhost:5000/consumo/ultimo');
+                const data = await response.json();
+    
+                if (data.error) {
+                    console.error(data.error);
+                    return;
+                }
+    
+                const { power, timestamp, energy } = data;
+                const tiempo = new Date(timestamp).toLocaleTimeString();
+    
+                // Actualizar gráfico de consumo
+                if (consumoChart.data.labels.length > 20) {
+                    consumoChart.data.labels.shift();
+                    consumoChart.data.datasets[0].data.shift();
+                }
+                consumoChart.data.labels.push(tiempo);
+                consumoChart.data.datasets[0].data.push(power);
+                consumoChart.update();
+    
+                // Actualizar historial en la tabla
+                const fila = `<tr class='border-b border-gray-300 dark:border-gray-600'>
+                    <td class='p-2'>${tiempo}</td>
+                    <td class='p-2'>${12}</td>
+                    <td class='p-2'>${(Math.random() * 2).toFixed(2)}</td>
+                    <td class='p-2'>${power}</td>
+                </tr>`;
+                document.getElementById('historial').insertAdjacentHTML('afterbegin', fila);
+    
+                // Calcular el costo
+                consumoTotal = energy;
+                const costoTotal = (consumoTotal * costoKWh).toFixed(4);
+                document.getElementById('costo').innerText = `$${costoTotal}`;
+            } catch (error) {
+                console.error('Error al obtener los datos: ', error);
             }
-            consumoChart.data.labels.push(tiempo);
-            consumoChart.data.datasets[0].data.push(potencia);
-            consumoChart.update();
-
-            const fila = `<tr class='border-b border-gray-300 dark:border-gray-600'><td class='p-2'>${tiempo}</td><td class='p-2'>${voltaje}</td><td class='p-2'>${corriente}</td><td class='p-2'>${potencia}</td></tr>`;
-            document.getElementById('historial').insertAdjacentHTML('afterbegin', fila);
-
-            consumoTotal += (potencia / 1000) * (1 / 3600);
-            const costoTotal = (consumoTotal * costoKWh).toFixed(4);
-            document.getElementById('costo').innerText = `$${costoTotal}`;
         }
-
-        function toggleDarkMode() {
-            const html = document.documentElement;
-            const moonIcon = document.getElementById('moon-icon');
-            const sunIcon = document.getElementById('sun-icon');
-
-            html.classList.toggle('dark');
-
-            if (html.classList.contains('dark')) {
-                moonIcon.classList.add('opacity-0', '-translate-y-2', 'scale-75');
-                sunIcon.classList.remove('hidden');
-                sunIcon.classList.add('opacity-100', 'translate-y-0', 'scale-100');
-                setTimeout(() => moonIcon.classList.add('hidden'), 300);
-            } else {
-                sunIcon.classList.add('opacity-0', '-translate-y-2', 'scale-75');
-                moonIcon.classList.remove('hidden');
-                moonIcon.classList.add('opacity-100', 'translate-y-0', 'scale-100');
-                setTimeout(() => sunIcon.classList.add('hidden'), 300);
-            }
-        }
-
-        setInterval(actualizarDatos, 1000);
-
+    
+        setInterval(obtenerDatos, 1000);
+    
         window.onload = () => {
             lucide.createIcons();
+            obtenerDatos(); // Cargar datos al inicio
         };
     </script>
+    
 </body>
 </html>

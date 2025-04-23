@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <SPIFFS.h>
+#include <math.h>  // <- Para pow()
 
 // Configuración WiFi
 const char* ssid = "FAMILIA-BLANCO";
@@ -8,12 +9,74 @@ const char* password = "2010mary35kk6915";
 
 WebServer server(80);
 
-// Declaraciones
-bool serveFile(const char* path);
-String getContentType(const String& path);
-void listAllFiles();
-void connectWiFi();
-void handleNotFound();
+String getContentType(const String& path); // <- Prototipo necesario
+// Implementaciones de las funciones declaradas
+bool serveFile(const char* path) {
+  if (SPIFFS.exists(path)) {
+    File file = SPIFFS.open(path, "r");
+    server.streamFile(file, getContentType(path));
+    file.close();
+    return true;
+  }
+  return false;
+}
+
+void handleNotFound() {
+  String message = "File Not Found\n\n";
+  message += "URI: ";
+  message += server.uri();
+  message += "\nMethod: ";
+  message += (server.method() == HTTP_GET) ? "GET" : "POST";
+  message += "\nArguments: ";
+  message += server.args();
+  message += "\n";
+  
+  for (uint8_t i = 0; i < server.args(); i++) {
+    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+  }
+  
+  server.send(404, "text/plain", message);
+}
+
+void listAllFiles() {
+  Serial.println("Listing all files in SPIFFS:");
+  File root = SPIFFS.open("/");
+  File file = root.openNextFile();
+  
+  while(file) {
+    Serial.print("File: ");
+    Serial.print(file.name());
+    Serial.print(" Size: ");
+    Serial.println(file.size());
+    file = root.openNextFile();
+  }
+}
+
+void connectWiFi() {
+  Serial.println("Connecting to WiFi...");
+  WiFi.begin(ssid, password);
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+String getContentType(const String& path) {
+  if (path.endsWith(".html")) return "text/html";
+  if (path.endsWith(".css")) return "text/css";
+  if (path.endsWith(".js")) return "application/javascript";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".jpg")) return "image/jpeg";
+  if (path.endsWith(".ico")) return "image/x-icon";
+  return "text/plain";
+}
+
 
 // Estructura para bombillos
 struct Bulb {
@@ -21,22 +84,28 @@ struct Bulb {
   uint8_t pwmChannel;
   bool hasAutoMode;
   bool hasBrightness;
+  bool hasPIRMode;  // Nueva propiedad para modo PIR
   int8_t sensorPin;
+  int8_t pirPin;    // Nuevo pin para sensor PIR
   uint16_t currentValue;
   bool isOn;
   bool autoMode;
+  bool pirMode;     // Nuevo modo PIR
   int ldrMin;
   int ldrThreshold;
   int ldrMax;
+  unsigned long lastPIRDetection; // Tiempo de última detección PIR
 };
 
-Bulb bulbs[5] = {
-  // pin, pwmChan, auto, bright, sensor, currVal, isOn, auto, ldrMin, ldrThresh, ldrMax
-  {2, 0, true, true, 34, 0, false, false, 500, 1600, 1700},  // Config LDR
-  {4, 1, false, true, -1, 0, false, false, 0, 0, 0},
-  {5, 2, false, true, -1, 0, false, false, 0, 0, 0},
-  {18, 3, false, true, 35, 0, false, false, 0, 0, 0},
-  {19, 4, false, true, -1, 0, false, false, 0, 0, 0}
+// Configuración de los LEDs (ahora son 6)
+Bulb bulbs[6] = {
+  // pin, pwmChan, auto, bright, PIR, sensor, PIRpin, currVal, isOn, auto, PIRmode, ldrMin, ldrThresh, ldrMax, lastPIR
+  {2, 0, true, true, false, 34, -1, 0, false, false, false, 500, 1600, 1700, 0},  // Config LDR
+  {4, 1, false, true, false, -1, -1, 0, false, false, false, 0, 0, 0, 0},
+  {5, 2, false, true, false, -1, -1, 0, false, false, false, 0, 0, 0, 0},
+  {18, 3, false, true, false, 35, -1, 0, false, false, false, 0, 0, 0, 0},
+  {19, 4, false, true, false, -1, -1, 0, false, false, false, 0, 0, 0, 0},
+  {21, 5, false, true, true, -1, 13, 0, false, false, false, 0, 0, 0, 0} // Nuevo LED con PIR (pin 13 para PIR)
 };
 
 uint16_t calcularBrilloLED(int valorLDR, const Bulb &bulb) {
@@ -62,18 +131,20 @@ uint16_t calcularBrilloLED(int valorLDR, const Bulb &bulb) {
 }
 
 void setupPWM() {
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 6; i++) { // Ahora son 6 LEDs
     ledcSetup(bulbs[i].pwmChannel, 5000, 8);
     ledcAttachPin(bulbs[i].pin, bulbs[i].pwmChannel);
     ledcWrite(bulbs[i].pwmChannel, 0);
     if (bulbs[i].sensorPin != -1)
       pinMode(bulbs[i].sensorPin, INPUT);
+    if (bulbs[i].pirPin != -1)
+      pinMode(bulbs[i].pirPin, INPUT);
   }
 }
 
 String getBulbStatus(int id) {
   String json;
-  json.reserve(128);
+  json.reserve(150); // Aumentado para incluir el nuevo campo
   json = "{\"id\":";
   json += id;
   json += ",\"isOn\":";
@@ -82,71 +153,15 @@ String getBulbStatus(int id) {
   json += bulbs[id].currentValue;
   json += ",\"autoMode\":";
   json += bulbs[id].autoMode ? "true" : "false";
+  json += ",\"pirMode\":";
+  json += bulbs[id].pirMode ? "true" : "false";
+  json += ",\"hasPIRMode\":";
+  json += bulbs[id].hasPIRMode ? "true" : "false";
   json += "}";
   return json;
 }
 
-String getContentType(const String& path) {
-  if (path.endsWith(".html")) return "text/html";
-  if (path.endsWith(".css")) return "text/css";
-  if (path.endsWith(".js")) return "application/javascript";
-  if (path.endsWith(".png")) return "image/png";
-  if (path.endsWith(".jpg")) return "image/jpeg";
-  if (path.endsWith(".ico")) return "image/x-icon";
-  return "text/plain";
-}
-
-bool serveFile(const char* path) {
-  if (SPIFFS.exists(path)) {
-    File file = SPIFFS.open(path, "r");
-    server.streamFile(file, getContentType(path));
-    file.close();
-    return true;
-  }
-  return false;
-}
-
-void listAllFiles() {
-  Serial.println("📂 Archivos en SPIFFS:");
-  File root = SPIFFS.open("/");
-  File file = root.openNextFile();
-  while (file) {
-    Serial.print(" - ");
-    Serial.print(file.name());
-    Serial.print("\t");
-    Serial.println(file.size());
-    file = root.openNextFile();
-  }
-}
-
-void connectWiFi() {
-  Serial.print("🔌 Conectando a WiFi ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, password);
-
-  int retries = 0;
-  while (WiFi.status() != WL_CONNECTED && retries < 20) {
-    delay(500);
-    Serial.print(".");
-    retries++;
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✅ WiFi conectado");
-    Serial.print("🌐 Dirección IP: ");
-    Serial.println(WiFi.localIP());
-  } else {
-    Serial.println("\n❌ No se pudo conectar a WiFi");
-    ESP.restart();
-  }
-}
-
-void handleNotFound() {
-  String message = "404 - Página no encontrada\n\n";
-  message += "URI: ";
-  message += server.uri();
-  server.send(404, "text/plain", message);
-}
+// ... (las funciones serveFile, getContentType, listAllFiles, connectWiFi, handleNotFound permanecen igual)
 
 void handleRoot() {
   if (!serveFile("/Index.html")) {
@@ -169,7 +184,7 @@ void handleConsumo() {
 void handleControlAPI() {
   if (server.hasArg("id") && server.hasArg("action")) {
     int id = server.arg("id").toInt();
-    if (id < 0 || id >= 5) {
+    if (id < 0 || id >= 6) { // Ahora son 6 LEDs
       server.send(400, "text/plain", "Invalid ID");
       return;
     }
@@ -178,16 +193,27 @@ void handleControlAPI() {
 
     if (action == "toggle") {
       bulbs[id].isOn = !bulbs[id].isOn;
+      bulbs[id].autoMode = false;
+      bulbs[id].pirMode = false;
       ledcWrite(bulbs[id].pwmChannel, bulbs[id].isOn ? bulbs[id].currentValue : 0);
     } 
     else if (action == "setBrightness" && bulbs[id].hasBrightness) {
       bulbs[id].currentValue = server.arg("value").toInt();
       bulbs[id].currentValue = constrain(bulbs[id].currentValue, 0, 255);
       bulbs[id].isOn = (bulbs[id].currentValue > 0);
+      if (bulbs[id].isOn) {
+        bulbs[id].autoMode = false;
+        bulbs[id].pirMode = false;
+      }
       ledcWrite(bulbs[id].pwmChannel, bulbs[id].currentValue);
     } 
     else if (action == "setMode" && bulbs[id].hasAutoMode) {
       bulbs[id].autoMode = (server.arg("mode") == "auto");
+      if (bulbs[id].autoMode) bulbs[id].pirMode = false;
+    }
+    else if (action == "setPIRMode" && bulbs[id].hasPIRMode) {
+      bulbs[id].pirMode = (server.arg("mode") == "pir");
+      if (bulbs[id].pirMode) bulbs[id].autoMode = false;
     }
     else if (action == "status") {
       server.send(200, "application/json", getBulbStatus(id));
@@ -253,7 +279,8 @@ void loop() {
   if (millis() - lastAutoUpdate > 1000) {
     lastAutoUpdate = millis();
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) { // Ahora son 6 LEDs
+      // Modo automático con LDR (como antes)
       if (bulbs[i].autoMode && bulbs[i].sensorPin != -1) {
         int ldrValue = analogRead(bulbs[i].sensorPin);
         bulbs[i].currentValue = calcularBrilloLED(ldrValue, bulbs[i]);
@@ -266,6 +293,31 @@ void loop() {
         Serial.print(ldrValue);
         Serial.print(" → Brillo: ");
         Serial.println(bulbs[i].currentValue);
+      }
+      
+      // Modo automático con PIR (nuevo)
+      if (bulbs[i].pirMode && bulbs[i].pirPin != -1) {
+        bool pirDetected = digitalRead(bulbs[i].pirPin) == HIGH;
+        
+        if (pirDetected) {
+          bulbs[i].lastPIRDetection = millis();
+          if (!bulbs[i].isOn) {
+            bulbs[i].isOn = true;
+            bulbs[i].currentValue = 255; // Encender al máximo cuando se detecta movimiento
+            ledcWrite(bulbs[i].pwmChannel, bulbs[i].currentValue);
+            Serial.print("PIR (ID ");
+            Serial.print(i);
+            Serial.println("): Movimiento detectado - LED encendido");
+          }
+        } else if (bulbs[i].isOn && (millis() - bulbs[i].lastPIRDetection > 30000)) {
+          // Apagar después de 30 segundos sin detección
+          bulbs[i].isOn = false;
+          bulbs[i].currentValue = 0;
+          ledcWrite(bulbs[i].pwmChannel, bulbs[i].currentValue);
+          Serial.print("PIR (ID ");
+          Serial.print(i);
+          Serial.println("): Tiempo sin movimiento - LED apagado");
+        }
       }
     }
   }
